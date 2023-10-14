@@ -7,13 +7,14 @@ CORS_HEADERS = {
     'Access-Control-Allow-Origin': os.environ["CORS_ALLOW_UI"] if os.environ["LOCALHOST_ORIGIN"] == "" else os.environ["LOCALHOST_ORIGIN"],
     'Access-Control-Allow-Methods': 'OPTIONS,POST,GET'
 }
+AOSS_ENDPOINT = os.environ["AOSS_ENDPOINT"]
 
 def handler(event,context):
     try:       
         return {
             "statusCode":200,
             "headers": CORS_HEADERS,
-            "body": json.dumps({"Hello world"})
+            "body": json.dumps({"Hello world":AOSS_ENDPOINT})
         }
     except Exception as e:
         return {
