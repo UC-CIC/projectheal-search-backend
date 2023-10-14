@@ -4,6 +4,7 @@ from constructs import Construct
 from aws_cdk import(
     Stack,
     aws_apigateway as apigateway,
+    aws_iam as iam,
     aws_lambda as lambda_
 )
 
@@ -29,6 +30,16 @@ class ApigStack(Stack):
 
 
         #################################################################################
+        # Custom lambda execution role for AOSS
+        #################################################################################
+        aossrole = iam.Role(self, "aoss-role",
+          assumed_by=iam.CompositePrincipal(
+            iam.ServicePrincipal("lambda.amazonaws.com")
+            )
+        )
+
+
+        #################################################################################
         # /hello
         #################################################################################        
         fn_hello_get = lambda_.Function(
@@ -36,6 +47,7 @@ class ApigStack(Stack):
             description="hello-get", #microservice tag
             runtime=lambda_.Runtime.PYTHON_3_10,
             handler="index.handler",
+            role=aossrole,
             code=lambda_.Code.from_asset(os.path.join("iac/lambda/hello","hello_get")),
             environment={
                 "AOSS_ENDPOINT": AOSS_ENDPOINT.value,
@@ -47,10 +59,74 @@ class ApigStack(Stack):
         pr_hello=api_route.add_resource("hello")
         # GET /hello
         intg_hello_get=apigateway.LambdaIntegration(fn_hello_get)
-        method_questionnaire_prohash=pr_hello.add_method(
+        method_hello=pr_hello.add_method(
             "GET",intg_hello_get,
             api_key_required=True
         )
+
+
+        #################################################################################
+        # /aoss
+        #################################################################################
+        
+        # !! IMPORTANT !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        #
+        # This function needs to be updated before any production like environment run.
+        # API_KEY should not be stored in Lambda environment variables and instead should
+        # be utilizing AWS Secrets Manager/Paramater Store and called within the lambda.
+        #
+        # Why? It's best security practices. Your key is in plaintext and leaked both in your CF
+        # template that is synthesized as well as your environment variable section ;).
+        #
+        # This is a shortcut being utilized purely for prototyping
+        #
+        fn_aoss_ingest_post = lambda_.Function(
+            self,"fn-aoss-ingest-post",
+            description="aoss-ingest-post", #microservice tag
+            runtime=lambda_.Runtime.PYTHON_3_10,
+            handler="index.handler",
+            role=aossrole,
+            code=lambda_.Code.from_asset(os.path.join("iac/lambda/aoss","ingest_post")),
+            environment={
+                "AOSS_ENDPOINT": AOSS_ENDPOINT.value,
+                "EMBEDDINGS_API": self.node.try_get_context('embeddings_api'),
+                "EMBEDDINGS_API_KEY": self.node.try_get_context('embeddings_api_key'),
+                "LOCALHOST_ORIGIN":LOCALHOST_ORIGIN if ALLOW_LOCALHOST_ORIGIN else ""
+            }
+        )
+        #
+        # !! IMPORTANT !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+
+        ###### Route Base = /aoss
+        pr_aoss=api_route.add_resource("aoss")
+        pr_aoss_ingest=pr_aoss.add_resource("ingest")
+        # POST /ingest
+        intg_ingest_post=apigateway.LambdaIntegration(fn_aoss_ingest_post)
+        method_ingest=pr_aoss_ingest.add_method(
+            "POST",intg_ingest_post,
+            api_key_required=True
+        )
+
+
+        #################################################################################
+        # Custom lambda execution role permissions
+        #################################################################################
+        aossrole.attach_inline_policy(iam.Policy(self, "scheduler-basic-execution-logging",
+            statements=[iam.PolicyStatement(
+                actions=["logs:CreateLogGroup","logs:CreateLogStream","logs:PutLogEvents"],
+                resources=["*"]
+            )             
+            ]
+        ))
+        aossrole.attach_inline_policy(iam.Policy(self, "scheduler-basic-explicit-invoke",
+            statements=[iam.PolicyStatement(
+                actions=["lambda:InvokeFunction"],
+                resources=[fn_hello_get.function_arn]
+            )             
+            ]
+        ))
+
 
         #################################################################################
         # Usage plan and api key to "lock" API
