@@ -61,7 +61,7 @@ class AOSSVectorStack(Stack):
 
     cfn_collection = aws_opss.CfnCollection(self, "misinformation-collection",
       name=collection_name,
-      description="Collection to be used for time-series analysis using OpenSearch Serverless",
+      description="Collection to be used for vector analysis using OpenSearch Serverless",
       type="VECTORSEARCH" # [SEARCH, TIMESERIES]
     )
     cfn_collection.add_dependency(cfn_network_security_policy)
