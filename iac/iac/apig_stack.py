@@ -15,6 +15,8 @@ class ApigStack(Stack):
         LOCALHOST_ORIGIN="http://localhost:3000"
         ALLOW_LOCALHOST_ORIGIN=ALO
 
+        layer_aoss = lambda_.LayerVersion.from_layer_version_arn(self,id="layer_aoss",layer_version_arn=self.node.try_get_context("layer_arn"))
+        
         core_api = apigateway.RestApi(
             self,"core-api",
             endpoint_configuration=apigateway.EndpointConfiguration(
@@ -45,7 +47,8 @@ class ApigStack(Stack):
             environment={
                 "AOSS_ENDPOINT": AOSS_ENDPOINT.value,
                 "LOCALHOST_ORIGIN":LOCALHOST_ORIGIN if ALLOW_LOCALHOST_ORIGIN else ""
-            }
+            },
+            layers=[ layer_aoss ]
         )
 
         ###### Route Base = /hello
@@ -85,7 +88,8 @@ class ApigStack(Stack):
                 "EMBEDDINGS_API": self.node.try_get_context('embeddings_api'),
                 "EMBEDDINGS_API_KEY": self.node.try_get_context('embeddings_api_key'),
                 "LOCALHOST_ORIGIN":LOCALHOST_ORIGIN if ALLOW_LOCALHOST_ORIGIN else ""
-            }
+            },
+            layers=[ layer_aoss ]
         )
         #
         # !! IMPORTANT !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!

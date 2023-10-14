@@ -29,7 +29,7 @@ region = boto3.Session().region_name
 service = 'aoss'
 credentials = boto3.Session().get_credentials()
 awsauth = AWS4Auth(credentials.access_key, credentials.secret_key, region, service, session_token=credentials.token)
-host=AOSS_ENDPOINT
+host=AOSS_ENDPOINT.replace("https://", "")
 aoss_index_name='statements'
 headers = { "Content-Type": "application/json" }
 
