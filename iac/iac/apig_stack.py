@@ -9,7 +9,7 @@ from aws_cdk import(
 )
 
 class ApigStack(Stack):
-    def __init__(self,scope: Construct, construct_id: str,  AOSS_ENDPOINT:str, ALO:bool,**kwargs) -> None:
+    def __init__(self,scope: Construct, construct_id: str,  AOSS_ROLE:iam.Role, AOSS_ENDPOINT:str, ALO:bool,**kwargs) -> None:
         super().__init__(scope, construct_id, **kwargs)
 
         LOCALHOST_ORIGIN="http://localhost:3000"
@@ -29,14 +29,7 @@ class ApigStack(Stack):
         api_route = core_api.root.add_resource("api")
 
 
-        #################################################################################
-        # Custom lambda execution role for AOSS
-        #################################################################################
-        aossrole = iam.Role(self, "aoss-role",
-          assumed_by=iam.CompositePrincipal(
-            iam.ServicePrincipal("lambda.amazonaws.com")
-            )
-        )
+
 
 
         #################################################################################
@@ -47,7 +40,7 @@ class ApigStack(Stack):
             description="hello-get", #microservice tag
             runtime=lambda_.Runtime.PYTHON_3_10,
             handler="index.handler",
-            role=aossrole,
+            role=AOSS_ROLE,
             code=lambda_.Code.from_asset(os.path.join("iac/lambda/hello","hello_get")),
             environment={
                 "AOSS_ENDPOINT": AOSS_ENDPOINT.value,
@@ -85,7 +78,7 @@ class ApigStack(Stack):
             description="aoss-ingest-post", #microservice tag
             runtime=lambda_.Runtime.PYTHON_3_10,
             handler="index.handler",
-            role=aossrole,
+            role=AOSS_ROLE,
             code=lambda_.Code.from_asset(os.path.join("iac/lambda/aoss","ingest_post")),
             environment={
                 "AOSS_ENDPOINT": AOSS_ENDPOINT.value,
@@ -112,17 +105,24 @@ class ApigStack(Stack):
         #################################################################################
         # Custom lambda execution role permissions
         #################################################################################
-        aossrole.attach_inline_policy(iam.Policy(self, "scheduler-basic-execution-logging",
+        AOSS_ROLE.attach_inline_policy(iam.Policy(self, "lambda-basic-execution-logging",
             statements=[iam.PolicyStatement(
                 actions=["logs:CreateLogGroup","logs:CreateLogStream","logs:PutLogEvents"],
                 resources=["*"]
             )             
             ]
         ))
-        aossrole.attach_inline_policy(iam.Policy(self, "scheduler-basic-explicit-invoke",
+        AOSS_ROLE.attach_inline_policy(iam.Policy(self, "lambda-basic-explicit-invoke",
             statements=[iam.PolicyStatement(
                 actions=["lambda:InvokeFunction"],
                 resources=[fn_hello_get.function_arn]
+            )             
+            ]
+        ))
+        AOSS_ROLE.attach_inline_policy(iam.Policy(self, "lambda-basic-aoss",
+            statements=[iam.PolicyStatement(
+                actions=["aoss:BatchGetCollection","aoss:APIAccessAll","aoss:DashboardsAccessAll"],
+                resources=["*"]
             )             
             ]
         ))

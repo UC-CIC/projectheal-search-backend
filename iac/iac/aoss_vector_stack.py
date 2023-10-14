@@ -5,7 +5,9 @@ import aws_cdk as cdk
 
 from aws_cdk import (
   Stack,
-  aws_opensearchserverless as aws_opss
+  cloudformation_include as cfn_inc,
+  aws_opensearchserverless as aws_opss,
+  aws_iam as iam
 )
 from constructs import Construct
 
@@ -16,6 +18,18 @@ class AOSSVectorStack(Stack):
     super().__init__(scope, construct_id, **kwargs)
 
     collection_name = self.node.try_get_context('collection_name') or "misinformation"
+
+
+
+    #################################################################################
+    # Custom lambda execution role for AOSS
+    #################################################################################
+    aoss_role = iam.Role(self, "aoss-role",
+      assumed_by=iam.CompositePrincipal(
+        iam.ServicePrincipal("lambda.amazonaws.com")
+        )
+    )
+
 
     network_security_policy = json.dumps([{
       "Rules": [
@@ -67,6 +81,7 @@ class AOSSVectorStack(Stack):
     cfn_collection.add_dependency(cfn_network_security_policy)
     cfn_collection.add_dependency(cfn_encryption_security_policy)
 
+    
     data_access_policy = json.dumps([
       {
         "Rules": [
@@ -98,7 +113,7 @@ class AOSSVectorStack(Stack):
           }
         ],
         "Principal": [
-          f"{self.node.try_get_context('aoss_principal_arn')}"
+          f"{aoss_role.role_arn}"
         ],
         "Description": "data-access-rule"
       }
@@ -114,7 +129,7 @@ class AOSSVectorStack(Stack):
       policy=data_access_policy,
       type="data"
     )
-
+    self.aoss_role = aoss_role
     self.aoss_endpoint = cdk.CfnOutput(self, f'{self.stack_name}-Endpoint', value=cfn_collection.attr_collection_endpoint)
     # Not supported with AOSS
     # cdk.CfnOutput(self, f'{self.stack_name}-DashboardsURL', value=cfn_collection.attr_dashboard_endpoint)

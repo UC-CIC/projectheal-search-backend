@@ -11,3 +11,5 @@ cdk.out
 
 # Other
 .reference
+
+iac/iac/lambda/custom_packages/src/**
