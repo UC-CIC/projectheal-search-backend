@@ -1,3 +1,60 @@
+# Setup
+
+Set your ENV Vars
+```
+set AWS_ACCESS_KEY_ID={value}
+set AWS_SECRET_ACCESS_KEY={value}
+set AWS_SESSION_TOKEN={value}
+set embeddings_api=value
+set embeddings_api_key=value
+```
+
+One time setup -- initialize layers stack:
+`cdk deploy cdk-layer-stack --context layer_arn=DUMMYARN --context embeddings_api=%embeddings_api% --context embeddings_api_key=%embeddings_api_key%`
+
+You can now use `deploy *` or `deploy {stackname}` as well as it's `destroy` equivalent
+
+
+If you want UI access to see the indexes created, create a manual data policy (call it manual-ui-access)
+```
+[
+  {
+    "Rules": [
+      {
+        "Resource": [
+          "collection/misinformation"
+        ],
+        "Permission": [
+          "aoss:CreateCollectionItems",
+          "aoss:DeleteCollectionItems",
+          "aoss:UpdateCollectionItems",
+          "aoss:DescribeCollectionItems"
+        ],
+        "ResourceType": "collection"
+      },
+      {
+        "Resource": [
+          "index/misinformation/*"
+        ],
+        "Permission": [
+          "aoss:CreateIndex",
+          "aoss:DeleteIndex",
+          "aoss:UpdateIndex",
+          "aoss:DescribeIndex",
+          "aoss:ReadDocument",
+          "aoss:WriteDocument"
+        ],
+        "ResourceType": "index"
+      }
+    ],
+    "Principal": [
+      "arn:aws:iam::{account}:role/aws-reserved/sso.amazonaws.com/AWSReservedSSO_AWSAdministratorAccess_{hash}"
+    ],
+    "Description": "Manually created policy for UI access"
+  }
+]
+```
+
 
 # Welcome to your CDK Python project!
 

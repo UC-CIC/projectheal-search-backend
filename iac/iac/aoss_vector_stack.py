@@ -14,21 +14,11 @@ from constructs import Construct
 
 class AOSSVectorStack(Stack):
 
-  def __init__(self, scope: Construct, construct_id: str, **kwargs) -> None:
+  def __init__(self, scope: Construct, construct_id: str, AOSS_ROLE: iam.Role, **kwargs) -> None:
     super().__init__(scope, construct_id, **kwargs)
 
     collection_name = self.node.try_get_context('collection_name') or "misinformation"
 
-
-
-    #################################################################################
-    # Custom lambda execution role for AOSS
-    #################################################################################
-    aoss_role = iam.Role(self, "aoss-role",
-      assumed_by=iam.CompositePrincipal(
-        iam.ServicePrincipal("lambda.amazonaws.com")
-        )
-    )
 
 
     network_security_policy = json.dumps([{
@@ -113,7 +103,7 @@ class AOSSVectorStack(Stack):
           }
         ],
         "Principal": [
-          f"{aoss_role.role_arn}"
+          f"{AOSS_ROLE.role_arn}"
         ],
         "Description": "data-access-rule"
       }
@@ -129,7 +119,7 @@ class AOSSVectorStack(Stack):
       policy=data_access_policy,
       type="data"
     )
-    self.aoss_role = aoss_role
+
     self.aoss_endpoint = cdk.CfnOutput(self, f'{self.stack_name}-Endpoint', value=cfn_collection.attr_collection_endpoint)
     # Not supported with AOSS
     # cdk.CfnOutput(self, f'{self.stack_name}-DashboardsURL', value=cfn_collection.attr_dashboard_endpoint)

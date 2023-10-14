@@ -34,7 +34,7 @@ aoss_index_name='statements'
 headers = { "Content-Type": "application/json" }
 
 
-def index_check(statement):
+def index_check():
     # Build the OpenSearch client
     client = OpenSearch(
         hosts=[{'host': host, 'port': 443}],
@@ -49,6 +49,50 @@ def index_check(statement):
     print('\Checking index:')
     print(response)
 
+def index_create():
+    # Build the OpenSearch client
+    client = OpenSearch(
+        hosts=[{'host': host, 'port': 443}],
+        http_auth=awsauth,
+        use_ssl=True,
+        verify_certs=True,
+        connection_class=RequestsHttpConnection,
+        timeout=300
+    )
+
+    response = client.indices.create(
+        aoss_index_name,
+        body={
+            "settings": {
+                "index.knn": True
+            },
+            "mappings": {
+                "properties": {
+                    "statement-vector": {
+                        "type": "knn_vector",
+                        "dimension": 1536,
+                        "method": {
+                            "name": "hnsw",
+                            "space_type": "cosinesimil",
+                            "engine": "nmslib",
+                            "parameters": {
+                                "ef_construction": 512,
+                                "m": 32
+                            }
+                        }
+                    },
+                    "statement": {
+                        "type": "text"
+                    },
+                    "statement-similar": {
+                        "type": "object"
+                    }
+                }
+            }
+        })
+    
+    print('\nCreating index:')
+    print(response)
 
 
 def handler(event,context):
@@ -58,7 +102,13 @@ def handler(event,context):
     try:
         statement=field_values["statement"]
 
-        index_check( statement )
+        index_exists = index_check()
+
+        if( index_exists=="False" ):
+            print("Index does not exist")
+            index_create()
+        
+
 
         return {
             "statusCode":200,
