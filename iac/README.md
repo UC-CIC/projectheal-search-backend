@@ -55,6 +55,16 @@ If you want UI access to see the indexes created, create a manual data policy (c
 ]
 ```
 
+`POST /api/ingest/`
+
+**body**
+
+```
+{
+    "statement":"hello world"
+}
+```
+
 
 # Welcome to your CDK Python project!
 

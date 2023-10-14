@@ -2,6 +2,7 @@ import os
 
 from constructs import Construct
 from aws_cdk import(
+    Duration,
     Stack,
     aws_apigateway as apigateway,
     aws_iam as iam,
@@ -89,11 +90,12 @@ class ApigStack(Stack):
                 "EMBEDDINGS_API_KEY": self.node.try_get_context('embeddings_api_key'),
                 "LOCALHOST_ORIGIN":LOCALHOST_ORIGIN if ALLOW_LOCALHOST_ORIGIN else ""
             },
+            timeout=Duration.minutes(3),
             layers=[ layer_aoss ]
         )
         #
         # !! IMPORTANT !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-
+        
 
         ###### Route Base = /aoss
         pr_aoss=api_route.add_resource("aoss")
@@ -130,7 +132,13 @@ class ApigStack(Stack):
             )             
             ]
         ))
-
+        AOSS_ROLE.attach_inline_policy(iam.Policy(self, "lambda-comprehend-medical",
+            statements=[iam.PolicyStatement(
+                actions=["comprehendmedical:*"],
+                resources=["*"]
+            )             
+            ]
+        ))
 
         #################################################################################
         # Usage plan and api key to "lock" API

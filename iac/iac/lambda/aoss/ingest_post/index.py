@@ -1,5 +1,6 @@
 import boto3
 import json
+import requests
 from requests_aws4auth import AWS4Auth
 from opensearchpy import OpenSearch, RequestsHttpConnection
 import os
@@ -24,7 +25,9 @@ EMBEDDINGS_API_KEY = os.environ["EMBEDDINGS_API_KEY"]
 # https://opensearch-project.github.io/opensearch-py/api-ref/clients/indices_client.html
 #################################
 
-client = boto3.client('opensearchserverless')
+aoss_client = boto3.client('opensearchserverless')
+comprehend_client = boto3.client('comprehendmedical')
+
 region = boto3.Session().region_name
 service = 'aoss'
 credentials = boto3.Session().get_credentials()
@@ -32,6 +35,25 @@ awsauth = AWS4Auth(credentials.access_key, credentials.secret_key, region, servi
 host=AOSS_ENDPOINT.replace("https://", "")
 aoss_index_name='statements'
 headers = { "Content-Type": "application/json" }
+
+
+
+def generate_statement_metadata(statement):
+    meta = {}
+    result = comprehend_client.detect_entities_v2(Text=statement)
+    print("Comprehend Medical Result")
+    print( result )
+    
+    for entity in result['Entities']:
+        if entity["Score"] > 0.75:
+            entity["Category"] = entity["Category"].lower()
+            metanew = ''.join(e for e in entity["Category"] if e.isalnum())
+            if metanew not in meta.keys():
+                meta[metanew] = []
+            meta[metanew].append(entity["Text"])
+
+
+    return meta
 
 
 def index_check():
@@ -48,6 +70,7 @@ def index_check():
     response = client.indices.exists(aoss_index_name)
     print('\Checking index:')
     print(response)
+    return response
 
 def index_create():
     # Build the OpenSearch client
@@ -94,6 +117,25 @@ def index_create():
     print('\nCreating index:')
     print(response)
 
+def generate_embeddings(statement):
+    headers = {
+        'x-api-key': EMBEDDINGS_API_KEY,
+        'Content-Type': 'application/json',
+    }
+    json_data = {
+        'inputText': statement,
+    }
+
+    response = requests.post(
+        EMBEDDINGS_API,
+        headers=headers,
+        json=json_data,
+    )
+
+    if response.status_code == 200:
+        vector_embedding = response.text
+
+    return vector_embedding
 
 def handler(event,context):
     print("<Ingest:Hello>")
@@ -103,12 +145,15 @@ def handler(event,context):
         statement=field_values["statement"]
 
         index_exists = index_check()
+        print(type(index_exists))
 
-        if( index_exists=="False" ):
+        if( index_exists==False ):
             print("Index does not exist")
             index_create()
         
-
+        metadata=generate_statement_metadata(statement)
+        embeddings=generate_embeddings(statement)
+        print(embeddings)
 
         return {
             "statusCode":200,
