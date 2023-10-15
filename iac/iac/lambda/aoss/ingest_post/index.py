@@ -342,7 +342,9 @@ def handler(event,context):
             print("Results found; mapping...")
             response=map_statement(statement_document=document,statement_metadata=metadata,matches=search_results['hits']['hits'])
             
-
+        
+        print("Explicit wait so indices can refresh ;)....  15 seconds")
+        time.sleep(15)  # Sleep for 15 seconds to "ensure" that results are refreshed on index and available for next API call
         return {
             "statusCode":200,
             "headers": CORS_HEADERS,
