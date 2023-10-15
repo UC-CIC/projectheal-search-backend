@@ -4,8 +4,8 @@ import requests
 from requests_aws4auth import AWS4Auth
 from opensearchpy import OpenSearch, RequestsHttpConnection
 import os
-
-
+import time
+import string
 
 CORS_HEADERS = {
     'Access-Control-Allow-Headers': 'Content-Type',
@@ -39,18 +39,19 @@ headers = { "Content-Type": "application/json" }
 
 
 def generate_statement_metadata(statement):
+    THRESHOLD = .75
     meta = {}
     result = comprehend_client.detect_entities_v2(Text=statement)
     print("Comprehend Medical Result")
     print( result )
     
     for entity in result['Entities']:
-        if entity["Score"] > 0.75:
+        if entity["Score"] > THRESHOLD:
             entity["Category"] = entity["Category"].lower()
             metanew = ''.join(e for e in entity["Category"] if e.isalnum())
             if metanew not in meta.keys():
                 meta[metanew] = []
-            meta[metanew].append(entity["Text"])
+            meta[metanew].append(entity["Text"].lower())
 
 
     return meta
@@ -131,18 +132,172 @@ def generate_embeddings(statement):
         headers=headers,
         json=json_data,
     )
+    print(response)
 
+    vector_embedding = None
     if response.status_code == 200:
-        vector_embedding = response.text
+        vector_embedding = response.json()
 
     return vector_embedding
+
+
+def create_filters(metadata):
+    filter_list = []
+    for key,values in metadata.items():
+        for filter_item in values:
+            query = {
+                "query_string": {
+                    "query": filter_item,
+                    "fields": [
+                        "metadata." + key
+                    ]
+                }
+            }
+            filter_list.append(query)
+    return filter_list
+
+def search_aoss(embeddings,filter_list):
+    # Build the OpenSearch client
+    client = OpenSearch(
+        hosts=[{'host': host, 'port': 443}],
+        http_auth=awsauth,
+        use_ssl=True,
+        verify_certs=True,
+        connection_class=RequestsHttpConnection,
+        timeout=300
+    )
+
+    query = {
+        'size': 20,
+        'query': {
+            'knn': {
+                "statement-vector": {
+                    "vector": embeddings,
+                    "k": 5
+                }
+            }
+        },
+        "post_filter": {
+            "bool": {
+                "should": filter_list
+            }
+        },
+        "fields": ["statement"]
+    }    
+
+    response = client.search(
+        body = query,
+        index = aoss_index_name
+    )
+    return(response)
+
+
+def ingest_document(document,doc_id=None):
+    # Build the OpenSearch client
+    client = OpenSearch(
+        hosts=[{'host': host, 'port': 443}],
+        http_auth=awsauth,
+        use_ssl=True,
+        verify_certs=True,
+        connection_class=RequestsHttpConnection,
+        timeout=300
+    )
+    response = None
+    if( doc_id is None ):
+        response = client.index(
+            index = aoss_index_name,
+            body = document
+        )
+    else:
+         print("~~~~~~~~UPDATE~~~~~~~")
+         
+         response = client.update(
+            index = aoss_index_name,
+            body = document,
+            id=doc_id
+        )
+                
+    return response
+
+
+def strip_knn_vector(data):
+    try:
+        rebuild = []
+        for entry in data['hits']['hits']:
+            entry["_source"]["statement-vector"]=[-1]
+            rebuild.append(entry)
+        data['hits']['hits'] = rebuild
+        return data
+    except:
+        return data
+
+def strip_punctuation(sentence):
+    # Create a translation table to remove punctuation
+    translator = str.maketrans('', '', string.punctuation)
+
+    # Use translate to remove punctuation from the sentence
+    stripped_sentence = sentence.translate(translator)
+
+    return stripped_sentence
+
+
+def map_statement(statement_document,statement_metadata,matches):
+    THRESHOLD = 0.8
+    mapped_counter = 0
+    # Build the OpenSearch client
+    client = OpenSearch(
+        hosts=[{'host': host, 'port': 443}],
+        http_auth=awsauth,
+        use_ssl=True,
+        verify_certs=True,
+        connection_class=RequestsHttpConnection,
+        timeout=300
+    )
+    # remember breaker for match on 1
+    for result in matches:
+        if (THRESHOLD <= result['_score'] < 1 ):
+            print("Result match, updating similar statement payload")
+            doc_id=result["_id"]
+
+            statement=statement_document["statement"]
+            doc_data=result["_source"]
+
+            statement_similar_json=doc_data["statement-similar"]
+            statement_similar_json[ statement ] = {"metadata":statement_metadata}
+            print("~~~SIMILAR-STATEMENT~~~~")
+            print(statement_similar_json)
+            
+            update_data = {
+                "doc": {
+                    "statement-similar":statement_similar_json
+                }
+            }
+
+            mapped_counter += 1
+            
+            response = ingest_document(update_data,doc_id=doc_id)
+
+            print(response)
+        elif( result['_score'] == 1 ):
+            mapped_counter+=1
+            print("EXACT MATCH, BYPASS ACTION")
+    
+    # no matches met threshold, create a new one
+    if( mapped_counter == 0 ):
+        print("No threshold matches, creating a new document")
+        response = ingest_document(statement_document)
+
+
+
+    
+
 
 def handler(event,context):
     print("<Ingest:Hello>")
     field_values=json.loads(event["body"])
     
     try:
-        statement=field_values["statement"]
+        statement=strip_punctuation(field_values["statement"].lower())
 
         index_exists = index_check()
         print(type(index_exists))
@@ -150,10 +305,43 @@ def handler(event,context):
         if( index_exists==False ):
             print("Index does not exist")
             index_create()
+
+            wait_checks=0
+            wait_breaker=5
+            # Poll and wait for the index to be created
+            while not index_check():
+                print(f"Index  is not yet created. Waiting...")
+                time.sleep(5)  # Sleep for 5 seconds before checking again
+                wait_checks+=1
+                if wait_checks >= wait_breaker:
+                    raise ValueError("AOSS Index Creation error. Waited to long. Breaking loop.")
         
         metadata=generate_statement_metadata(statement)
+        print(metadata)
         embeddings=generate_embeddings(statement)
-        print(embeddings)
+        # print(embeddings)
+        filter_list = create_filters(metadata)
+        print(filter_list)
+
+        search_results = search_aoss(embeddings=embeddings,filter_list=filter_list)
+        print(strip_knn_vector(search_results))
+
+        document = {
+            'statement': statement,
+            'statement-vector': embeddings,
+            'statement-similar': {},
+            'metadata': metadata
+        }
+
+        # Ingest or map to results
+        if (search_results['hits']['max_score'] == None):
+            print("No results found; ingesting...")
+            response=ingest_document(document)
+            print(response)
+        else:
+            print("Results found; mapping...")
+            response=map_statement(statement_document=document,statement_metadata=metadata,matches=search_results['hits']['hits'])
+            
 
         return {
             "statusCode":200,
