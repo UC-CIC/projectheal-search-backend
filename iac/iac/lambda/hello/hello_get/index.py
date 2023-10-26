@@ -14,7 +14,7 @@ def handler(event,context):
         return {
             "statusCode":200,
             "headers": CORS_HEADERS,
-            "body": json.dumps({"Hello world":AOSS_ENDPOINT})
+            "body": json.dumps({"Hi world":AOSS_ENDPOINT})
         }
     except Exception as e:
         return {
