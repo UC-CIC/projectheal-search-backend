@@ -1,0 +1,47 @@
+[
+    {
+        "Id": 1,
+        "BeginOffset": 0,
+        "EndOffset": 18,
+        "Score": 0.9788424372673035,
+        "Text": "Parkinsons disease",
+        "Category": "MEDICAL_CONDITION",
+        "Type": "DX_NAME",
+        "Traits": [
+            {
+                "Name": "DIAGNOSIS",
+                "Score": 0.9840633273124695
+            }
+        ]
+    },
+    {
+        "Id": 2,
+        "BeginOffset": 26,
+        "EndOffset": 50,
+        "Score": 0.7797849178314209,
+        "Text": "uncontrollable movements",
+        "Category": "MEDICAL_CONDITION",
+        "Type": "DX_NAME",
+        "Traits": [
+            {
+                "Name": "HYPOTHETICAL",
+                "Score": 0.6037694215774536
+            }
+        ]
+    },
+    {
+        "Id": 3,
+        "BeginOffset": 57,
+        "EndOffset": 64,
+        "Score": 0.7523360848426819,
+        "Text": "shaking",
+        "Category": "MEDICAL_CONDITION",
+        "Type": "DX_NAME",
+        "Traits": [
+            {
+                "Name": "SYMPTOM",
+                "Score": 0.5725449919700623
+            }
+        ]
+    }
+]

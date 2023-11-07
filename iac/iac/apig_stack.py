@@ -107,6 +107,37 @@ class ApigStack(Stack):
             api_key_required=True
         )
 
+        #################################################################################
+        # /aoss/search_post
+        #################################################################################
+        
+        #
+        fn_aoss_search_post = lambda_.Function(
+            self,"fn_aoss_search_post",
+            description="aoss-search-post", #microservice tag
+            runtime=lambda_.Runtime.PYTHON_3_10,
+            handler="index.handler",
+            role=AOSS_ROLE,
+            code=lambda_.Code.from_asset(os.path.join("iac/lambda/aoss","search_post")),
+            environment={
+                "AOSS_ENDPOINT": AOSS_ENDPOINT.value,
+                "EMBEDDINGS_API": self.node.try_get_context('embeddings_api'),
+                "EMBEDDINGS_API_KEY": self.node.try_get_context('embeddings_api_key'),
+                "LOCALHOST_ORIGIN":LOCALHOST_ORIGIN if ALLOW_LOCALHOST_ORIGIN else ""
+            },
+            timeout=Duration.minutes(3),
+            layers=[ layer_aoss ]
+        )
+        #        
+        ###### Route Base = /aoss
+        pr_aoss_search=pr_aoss.add_resource("search")
+        # POST /search
+        intg_search_post=apigateway.LambdaIntegration(fn_aoss_search_post)
+        method_ingest=pr_aoss_search.add_method(
+            "POST",intg_search_post,
+            api_key_required=True
+        )
+
 
         #################################################################################
         # Custom lambda execution role permissions

@@ -9,4 +9,5 @@ try:
     latest_version_arn = response["LayerVersions"][0]["LayerVersionArn"]
     print(latest_version_arn)
 except Exception as e:
+    print(e)
     print("")

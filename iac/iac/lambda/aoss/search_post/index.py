@@ -73,50 +73,6 @@ def index_check():
     print(response)
     return response
 
-def index_create():
-    # Build the OpenSearch client
-    client = OpenSearch(
-        hosts=[{'host': host, 'port': 443}],
-        http_auth=awsauth,
-        use_ssl=True,
-        verify_certs=True,
-        connection_class=RequestsHttpConnection,
-        timeout=300
-    )
-
-    response = client.indices.create(
-        aoss_index_name,
-        body={
-            "settings": {
-                "index.knn": True
-            },
-            "mappings": {
-                "properties": {
-                    "statement-vector": {
-                        "type": "knn_vector",
-                        "dimension": 1536,
-                        "method": {
-                            "name": "hnsw",
-                            "space_type": "cosinesimil",
-                            "engine": "nmslib",
-                            "parameters": {
-                                "ef_construction": 512,
-                                "m": 32
-                            }
-                        }
-                    },
-                    "statement": {
-                        "type": "text"
-                    },
-                    "statement-similar": {
-                        "type": "object"
-                    }
-                }
-            }
-        })
-    
-    print('\nCreating index:')
-    print(response)
 
 def generate_embeddings(statement):
     headers = {
@@ -192,33 +148,6 @@ def search_aoss(embeddings,filter_list):
     return(response)
 
 
-def ingest_document(document,doc_id=None):
-    # Build the OpenSearch client
-    client = OpenSearch(
-        hosts=[{'host': host, 'port': 443}],
-        http_auth=awsauth,
-        use_ssl=True,
-        verify_certs=True,
-        connection_class=RequestsHttpConnection,
-        timeout=300
-    )
-    response = None
-    if( doc_id is None ):
-        response = client.index(
-            index = aoss_index_name,
-            body = document
-        )
-    else:
-         print("~~~~~~~~UPDATE~~~~~~~")
-         
-         response = client.update(
-            index = aoss_index_name,
-            body = document,
-            id=doc_id
-        )
-                
-    return response
-
 
 def strip_knn_vector(data):
     try:
@@ -243,7 +172,7 @@ def strip_punctuation(sentence):
 
 def map_statement(statement_document,statement_metadata,matches):
     THRESHOLD = 0.8
-    mapped_counter = 0
+
     # Build the OpenSearch client
     client = OpenSearch(
         hosts=[{'host': host, 'port': 443}],
@@ -254,9 +183,11 @@ def map_statement(statement_document,statement_metadata,matches):
         timeout=300
     )
     # remember breaker for match on 1
+    similar_statements = []
+    exact_match = []
     for result in matches:
         if (THRESHOLD <= result['_score'] < 1 ):
-            print("Result match, updating similar statement payload")
+            # print("Result match, updating similar statement payload")
             doc_id=result["_id"]
 
             statement=statement_document["statement"]
@@ -264,64 +195,35 @@ def map_statement(statement_document,statement_metadata,matches):
 
             statement_similar_json=doc_data["statement-similar"]
             statement_similar_json[ statement ] = {"metadata":statement_metadata}
-            print("~~~SIMILAR-STATEMENT~~~~")
-            print(statement_similar_json)
-            
-            update_data = {
-                "doc": {
-                    "statement-similar":statement_similar_json
-                }
-            }
 
-            mapped_counter += 1
-            
-            response = ingest_document(update_data,doc_id=doc_id)
-
-            print(response)
+            similar_statements.append(statement_similar_json)
         elif( result['_score'] == 1 ):
-            mapped_counter+=1
-            print("EXACT MATCH, BYPASS ACTION")
-    
-    # no matches met threshold, create a new one
-    if( mapped_counter == 0 ):
-        print("No threshold matches, creating a new document")
-        response = ingest_document(statement_document)
+            print("EXACT MATCH")
+            doc_data=result["_source"]
+            statement=statement_document["statement"]
+            statement_json=doc_data["statement-similar"]
+            statement_json[ statement ] = {"metadata":statement_metadata}
 
+            exact_match.append(statement_json)
 
-
-    
+    return (exact_match, similar_statements)
 
 
 def handler(event,context):
     print("<Ingest:Hello>")
     field_values=json.loads(event["body"])
-    # field_values = event
-    # print(field_values)
+
     print(event["body"])
     
     try:
         statement=strip_punctuation(field_values["statement"].lower())
-        # statement=strip_punctuation(event["statement"].lower())
-        # print(event["statement"])
-        # print(statement)
-
         index_exists = index_check()
         print(type(index_exists))
 
         if( index_exists==False ):
             print("Index does not exist")
-            index_create()
-
-            wait_checks=0
-            wait_breaker=5
-            # Poll and wait for the index to be created
-            while not index_check():
-                print(f"Index  is not yet created. Waiting...")
-                time.sleep(5)  # Sleep for 5 seconds before checking again
-                wait_checks+=1
-                if wait_checks >= wait_breaker:
-                    raise ValueError("AOSS Index Creation error. Waited to long. Breaking loop.")
-        
+            return []
+            
         metadata=generate_statement_metadata(statement)
         print(metadata)
         embeddings=generate_embeddings(statement)
@@ -339,22 +241,16 @@ def handler(event,context):
         }
 
         # Ingest or map to results
-        if (search_results['hits']['max_score'] == None):
-            print("No results found; ingesting...")
-            response=ingest_document(document)
-            print(response)
-        else:
+        if (search_results['hits']['max_score'] != None):
             print(strip_knn_vector(search_results))
             print("Results found; mapping...")
             response=map_statement(statement_document=document,statement_metadata=metadata,matches=search_results['hits']['hits'])
-            
-        
-        print("Explicit wait so indices can refresh ;)....  15 seconds")
-        time.sleep(15)  # Sleep for 15 seconds to "ensure" that results are refreshed on index and available for next API call
+            print(response)
+
         return {
             "statusCode":200,
             "headers": CORS_HEADERS,
-            "body": json.dumps({"Hello world":AOSS_ENDPOINT})
+            "body": json.dumps({"Search response":response})
         }
     except Exception as e:
         return {
@@ -362,3 +258,4 @@ def handler(event,context):
             "headers": CORS_HEADERS,
             "body": json.dumps({"msg":str(e)})
         }
+ 
