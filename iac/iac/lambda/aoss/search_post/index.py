@@ -186,12 +186,14 @@ def map_statement(statement_document,statement_metadata,matches):
     similar_statements = []
     exact_match = []
     for result in matches:
+        statement_json={}
         if (THRESHOLD <= result['_score'] < 1 ):
             # print("Result match, updating similar statement payload")
             doc_id=result["_id"]
 
             statement=statement_document["statement"]
             doc_data=result["_source"]
+            print(doc_data)
 
             statement_similar_json=doc_data["statement-similar"]
             statement_similar_json[ statement ] = {"metadata":statement_metadata}
@@ -200,11 +202,15 @@ def map_statement(statement_document,statement_metadata,matches):
         elif( result['_score'] == 1 ):
             print("EXACT MATCH")
             doc_data=result["_source"]
-            statement=statement_document["statement"]
-            statement_json=doc_data["statement-similar"]
-            statement_json[ statement ] = {"metadata":statement_metadata}
+            print(doc_data)
 
+            statement=statement_document["statement"]
+            statement_json[ statement ] = {"metadata":doc_data["metadata"]}
             exact_match.append(statement_json)
+
+            statement_similar_json=doc_data["statement-similar"]
+            similar_statements.append(statement_similar_json)
+
 
     return (exact_match, similar_statements)
 
@@ -213,7 +219,7 @@ def handler(event,context):
     print("<Ingest:Hello>")
     field_values=json.loads(event["body"])
 
-    print(event["body"])
+    # print(event["body"])
     
     try:
         statement=strip_punctuation(field_values["statement"].lower())
@@ -246,6 +252,9 @@ def handler(event,context):
             print("Results found; mapping...")
             response=map_statement(statement_document=document,statement_metadata=metadata,matches=search_results['hits']['hits'])
             print(response)
+        else:
+            print("No results found.")
+            response=""
 
         return {
             "statusCode":200,
@@ -258,4 +267,3 @@ def handler(event,context):
             "headers": CORS_HEADERS,
             "body": json.dumps({"msg":str(e)})
         }
- 
