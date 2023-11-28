@@ -60,7 +60,8 @@ def generateEmbeddings(input_statement):
       headers=headers,
       json=json_data,
   )
-
+  print(response.text)
+  print(response.status_code)
   if response.status_code == 200:
       vector_embedding = response.text
   return vector_embedding

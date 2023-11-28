@@ -56,6 +56,14 @@ def generate_statement_metadata(statement):
 
     return meta
 
+def generate_statement_background(statement, intent, severity, source):
+    back = {
+        "intent": intent,
+        "severity": severity,
+        "source": source
+    } 
+
+    return back
 
 def index_check():
     # Build the OpenSearch client
@@ -170,7 +178,7 @@ def strip_punctuation(sentence):
     return stripped_sentence
 
 
-def map_statement(statement_document,statement_metadata,matches):
+def map_statement(statement_document,statement_metadata,statement_backdata,matches):
     THRESHOLD = 0.8
 
     # Build the OpenSearch client
@@ -196,7 +204,7 @@ def map_statement(statement_document,statement_metadata,matches):
             print(doc_data)
 
             statement_similar_json=doc_data["statement-similar"]
-            statement_similar_json[ statement ] = {"metadata":statement_metadata}
+            statement_similar_json[ statement ] = {"metadata":statement_metadata, "background": statement_backdata}
 
             similar_statements.append(statement_similar_json)
         elif( result['_score'] == 1 ):
@@ -205,7 +213,7 @@ def map_statement(statement_document,statement_metadata,matches):
             print(doc_data)
 
             statement=statement_document["statement"]
-            statement_json[ statement ] = {"metadata":doc_data["metadata"]}
+            statement_json[ statement ] = {"metadata":doc_data["metadata"], "background": doc_data["background"]}
             exact_match.append(statement_json)
 
             statement_similar_json=doc_data["statement-similar"]
@@ -223,6 +231,9 @@ def handler(event,context):
     
     try:
         statement=strip_punctuation(field_values["statement"].lower())
+        intent=field_values["intent"].lower()
+        severity=field_values["severity"].lower()
+        source=field_values["source"].lower()
         index_exists = index_check()
         print(type(index_exists))
 
@@ -232,6 +243,8 @@ def handler(event,context):
             
         metadata=generate_statement_metadata(statement)
         print(metadata)
+        backdata=generate_statement_background(statement, intent, severity, source)
+        print(backdata)
         embeddings=generate_embeddings(statement)
         # print(embeddings)
         filter_list = create_filters(metadata)
@@ -243,14 +256,15 @@ def handler(event,context):
             'statement': statement,
             'statement-vector': embeddings,
             'statement-similar': {},
-            'metadata': metadata
+            'metadata': metadata,
+            'background': backdata
         }
 
         # Ingest or map to results
         if (search_results['hits']['max_score'] != None):
             print(strip_knn_vector(search_results))
             print("Results found; mapping...")
-            response=map_statement(statement_document=document,statement_metadata=metadata,matches=search_results['hits']['hits'])
+            response=map_statement(statement_document=document,statement_metadata=metadata,statement_background=backdata,matches=search_results['hits']['hits'])
             print(response)
         else:
             print("No results found.")

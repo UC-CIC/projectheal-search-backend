@@ -56,6 +56,15 @@ def generate_statement_metadata(statement):
 
     return meta
 
+def generate_statement_background(statement, intent, severity, source):
+    back = {
+        "intent": intent,
+        "severity": severity,
+        "source": source
+    } 
+
+    return back
+
 
 def index_check():
     # Build the OpenSearch client
@@ -241,7 +250,7 @@ def strip_punctuation(sentence):
     return stripped_sentence
 
 
-def map_statement(statement_document,statement_metadata,matches):
+def map_statement(statement_document,statement_metadata,statement_backdata,matches):
     THRESHOLD = 0.8
     mapped_counter = 0
     # Build the OpenSearch client
@@ -263,7 +272,7 @@ def map_statement(statement_document,statement_metadata,matches):
             doc_data=result["_source"]
 
             statement_similar_json=doc_data["statement-similar"]
-            statement_similar_json[ statement ] = {"metadata":statement_metadata}
+            statement_similar_json[ statement ] = {"metadata":statement_metadata, "background": statement_backdata}
             print("~~~SIMILAR-STATEMENT~~~~")
             print(statement_similar_json)
             
@@ -301,6 +310,9 @@ def handler(event,context):
     
     try:
         statement=strip_punctuation(field_values["statement"].lower())
+        intent=field_values["intent"].lower()
+        severity=field_values["severity"].lower()
+        source=field_values["source"].lower()
         # statement=strip_punctuation(event["statement"].lower())
         # print(event["statement"])
         # print(statement)
@@ -324,6 +336,8 @@ def handler(event,context):
         
         metadata=generate_statement_metadata(statement)
         print(metadata)
+        backdata=generate_statement_background(statement, intent, severity, source)
+        print(backdata)
         embeddings=generate_embeddings(statement)
         # print(embeddings)
         filter_list = create_filters(metadata)
@@ -335,7 +349,8 @@ def handler(event,context):
             'statement': statement,
             'statement-vector': embeddings,
             'statement-similar': {},
-            'metadata': metadata
+            'metadata': metadata,
+            'background': backdata
         }
 
         # Ingest or map to results
@@ -346,7 +361,7 @@ def handler(event,context):
         else:
             print(strip_knn_vector(search_results))
             print("Results found; mapping...")
-            response=map_statement(statement_document=document,statement_metadata=metadata,matches=search_results['hits']['hits'])
+            response=map_statement(statement_document=document,statement_metadata=metadata,statement_background=backdata,matches=search_results['hits']['hits'])
             
         
         print("Explicit wait so indices can refresh ;)....  15 seconds")
