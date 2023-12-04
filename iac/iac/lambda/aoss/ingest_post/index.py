@@ -361,7 +361,7 @@ def handler(event,context):
         else:
             print(strip_knn_vector(search_results))
             print("Results found; mapping...")
-            response=map_statement(statement_document=document,statement_metadata=metadata,statement_background=backdata,matches=search_results['hits']['hits'])
+            response=map_statement(statement_document=document,statement_metadata=metadata,statement_backdata=backdata,matches=search_results['hits']['hits'])
             
         
         print("Explicit wait so indices can refresh ;)....  15 seconds")

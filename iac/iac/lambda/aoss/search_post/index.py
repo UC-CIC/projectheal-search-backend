@@ -178,7 +178,7 @@ def strip_punctuation(sentence):
     return stripped_sentence
 
 
-def map_statement(statement_document,statement_metadata,statement_backdata,matches):
+def map_statement(statement_document,statement_metadata,statement_background,matches):
     THRESHOLD = 0.8
 
     # Build the OpenSearch client
@@ -204,7 +204,7 @@ def map_statement(statement_document,statement_metadata,statement_backdata,match
             print(doc_data)
 
             statement_similar_json=doc_data["statement-similar"]
-            statement_similar_json[ statement ] = {"metadata":statement_metadata, "background": statement_backdata}
+            statement_similar_json[ statement ] = {"metadata":statement_metadata, "background": statement_background}
 
             similar_statements.append(statement_similar_json)
         elif( result['_score'] == 1 ):
