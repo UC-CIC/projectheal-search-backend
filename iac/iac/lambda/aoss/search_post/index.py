@@ -41,12 +41,14 @@ headers = { "Content-Type": "application/json" }
 def generate_statement_metadata(statement):
     THRESHOLD = .75
     meta = {}
+    topics = []
     result = comprehend_client.detect_entities_v2(Text=statement)
     print("Comprehend Medical Result")
     print( result )
     
     for entity in result['Entities']:
         if entity["Score"] > THRESHOLD:
+            topics.append(entity["Category"].replace('_', ' ').lower())
             entity["Category"] = entity["Category"].lower()
             metanew = ''.join(e for e in entity["Category"] if e.isalnum())
             if metanew not in meta.keys():
@@ -54,13 +56,14 @@ def generate_statement_metadata(statement):
             meta[metanew].append(entity["Text"].lower())
 
 
-    return meta
+    return meta, topics
 
-def generate_statement_background(statement, intent, severity, source):
+def generate_statement_background(statement, intent, severity, source, topics):
     back = {
         "intent": intent,
         "severity": severity,
-        "source": source
+        "source": source,
+        "topic": topics
     } 
 
     return back
@@ -195,6 +198,7 @@ def map_statement(statement_document,statement_metadata,statement_background,mat
     exact_match = []
     for result in matches:
         statement_json={}
+        exact_json ={}
         if (THRESHOLD <= result['_score'] < 1 ):
             # print("Result match, updating similar statement payload")
             doc_id=result["_id"]
@@ -203,8 +207,11 @@ def map_statement(statement_document,statement_metadata,statement_background,mat
             doc_data=result["_source"]
             print(doc_data)
 
+            exact_json[ doc_data["statement"] ] = {"metadata":doc_data["metadata"], "background": doc_data["background"]}
+            exact_match.append(exact_json)
+            
             statement_similar_json=doc_data["statement-similar"]
-            statement_similar_json[ statement ] = {"metadata":statement_metadata, "background": statement_background}
+            # statement_similar_json[ statement ] = {"metadata":statement_metadata, "background": statement_background}
 
             similar_statements.append(statement_similar_json)
         elif( result['_score'] == 1 ):
@@ -241,9 +248,9 @@ def handler(event,context):
             print("Index does not exist")
             return []
             
-        metadata=generate_statement_metadata(statement)
+        metadata, topics=generate_statement_metadata(statement)
         print(metadata)
-        backdata=generate_statement_background(statement, intent, severity, source)
+        backdata=generate_statement_background(statement, intent, severity, source, topics)
         print(backdata)
         embeddings=generate_embeddings(statement)
         # print(embeddings)

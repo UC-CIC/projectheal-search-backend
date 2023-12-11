@@ -41,12 +41,15 @@ headers = { "Content-Type": "application/json" }
 def generate_statement_metadata(statement):
     THRESHOLD = .75
     meta = {}
+    topics = []
     result = comprehend_client.detect_entities_v2(Text=statement)
     print("Comprehend Medical Result")
     print( result )
     
     for entity in result['Entities']:
         if entity["Score"] > THRESHOLD:
+            topics.append(entity["Category"].replace('_', ' ').lower())
+            # print(entity["Category"])
             entity["Category"] = entity["Category"].lower()
             metanew = ''.join(e for e in entity["Category"] if e.isalnum())
             if metanew not in meta.keys():
@@ -54,13 +57,14 @@ def generate_statement_metadata(statement):
             meta[metanew].append(entity["Text"].lower())
 
 
-    return meta
+    return meta, topics
 
-def generate_statement_background(statement, intent, severity, source):
+def generate_statement_background(statement, intent, severity, source, topics):
     back = {
         "intent": intent,
         "severity": severity,
-        "source": source
+        "source": source,
+        "topic": topics
     } 
 
     return back
@@ -146,6 +150,8 @@ def generate_embeddings(statement):
     vector_embedding = None
     if response.status_code == 200:
         vector_embedding = response.json()
+    else:
+        print(response.text)
 
     return vector_embedding
 
@@ -288,8 +294,17 @@ def map_statement(statement_document,statement_metadata,statement_backdata,match
 
             print(response)
         elif( result['_score'] == 1 ):
+            doc_id=result["_id"]
             mapped_counter+=1
             print("EXACT MATCH, BYPASS ACTION")
+            update_data = {
+                "doc": {
+                    "background":statement_backdata
+                }
+            }
+            response = ingest_document(update_data,doc_id=doc_id)
+
+            print(response)
     
     # no matches met threshold, create a new one
     if( mapped_counter == 0 ):
@@ -298,7 +313,7 @@ def map_statement(statement_document,statement_metadata,statement_backdata,match
 
 
 
-    
+
 
 
 def handler(event,context):
@@ -334,9 +349,9 @@ def handler(event,context):
                 if wait_checks >= wait_breaker:
                     raise ValueError("AOSS Index Creation error. Waited to long. Breaking loop.")
         
-        metadata=generate_statement_metadata(statement)
+        metadata, topics=generate_statement_metadata(statement)
         print(metadata)
-        backdata=generate_statement_background(statement, intent, severity, source)
+        backdata=generate_statement_background(statement, intent, severity, source, topics)
         print(backdata)
         embeddings=generate_embeddings(statement)
         # print(embeddings)
