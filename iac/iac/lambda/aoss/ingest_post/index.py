@@ -41,15 +41,15 @@ headers = { "Content-Type": "application/json" }
 def generate_statement_metadata(statement):
     THRESHOLD = .75
     meta = {}
-    topics = []
+    topics = set()
     result = comprehend_client.detect_entities_v2(Text=statement)
     print("Comprehend Medical Result")
     print( result )
     
     for entity in result['Entities']:
         if entity["Score"] > THRESHOLD:
-            topics.append(entity["Category"].replace('_', ' ').lower())
-            # print(entity["Category"])
+            # topics.append(entity["Category"].replace('_', ' ').lower())
+            topics.add(entity["Category"].replace('_', ' ').lower())
             entity["Category"] = entity["Category"].lower()
             metanew = ''.join(e for e in entity["Category"] if e.isalnum())
             if metanew not in meta.keys():
@@ -57,7 +57,7 @@ def generate_statement_metadata(statement):
             meta[metanew].append(entity["Text"].lower())
 
 
-    return meta, topics
+    return meta, list(topics)
 
 def generate_statement_background(statement, intent, severity, source, topics):
     back = {
@@ -294,17 +294,17 @@ def map_statement(statement_document,statement_metadata,statement_backdata,match
 
             print(response)
         elif( result['_score'] == 1 ):
-            doc_id=result["_id"]
+            # doc_id=result["_id"]
             mapped_counter+=1
             print("EXACT MATCH, BYPASS ACTION")
-            update_data = {
-                "doc": {
-                    "background":statement_backdata
-                }
-            }
-            response = ingest_document(update_data,doc_id=doc_id)
+            # update_data = {
+            #     "doc": {
+            #         "background":statement_backdata
+            #     }
+            # }
+            # response = ingest_document(update_data,doc_id=doc_id)
 
-            print(response)
+            # print(response)
     
     # no matches met threshold, create a new one
     if( mapped_counter == 0 ):

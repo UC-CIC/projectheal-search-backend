@@ -41,14 +41,14 @@ headers = { "Content-Type": "application/json" }
 def generate_statement_metadata(statement):
     THRESHOLD = .75
     meta = {}
-    topics = []
+    topics = set()
     result = comprehend_client.detect_entities_v2(Text=statement)
     print("Comprehend Medical Result")
     print( result )
     
     for entity in result['Entities']:
         if entity["Score"] > THRESHOLD:
-            topics.append(entity["Category"].replace('_', ' ').lower())
+            topics.add(entity["Category"].replace('_', ' ').lower())
             entity["Category"] = entity["Category"].lower()
             metanew = ''.join(e for e in entity["Category"] if e.isalnum())
             if metanew not in meta.keys():
@@ -56,7 +56,7 @@ def generate_statement_metadata(statement):
             meta[metanew].append(entity["Text"].lower())
 
 
-    return meta, topics
+    return meta, list(topics)
 
 def generate_statement_background(statement, intent, severity, source, topics):
     back = {
@@ -108,7 +108,7 @@ def generate_embeddings(statement):
     return vector_embedding
 
 
-def create_filters(metadata):
+def create_filters(metadata, intent, severity, source, topic, medicalconditions):
     filter_list = []
     for key,values in metadata.items():
         for filter_item in values:
@@ -121,6 +121,33 @@ def create_filters(metadata):
                 }
             }
             filter_list.append(query)
+
+    postfilterlist =[]
+
+    intent_filter = {"term": {"background.intent": intent}} if intent != "" else None
+    severity_filter = {"term": {"background.severity": severity}} if severity != "" else None
+    source_filter = {"term": {"background.source": source}} if source != "" else None
+    topic_filter = {"terms": {"background.topic": topic}} if topic is not None and any(topic) else None   
+    medicalconditions_filter = {"terms": {"metadata.medicalcondition": medicalconditions}} if medicalconditions is not None and any(medicalconditions) else None
+
+    if intent_filter:
+        postfilterlist.append(intent_filter)
+    if severity_filter:
+        postfilterlist.append(severity_filter)
+    if source_filter:
+        postfilterlist.append(source_filter)
+    if topic_filter:
+        postfilterlist.append(topic_filter)
+    if medicalconditions_filter:
+        postfilterlist.append(medicalconditions_filter)
+    
+    postfilter = {
+        "bool": {
+                "must": postfilterlist
+            }
+        }
+
+    filter_list.append(postfilter)
     return filter_list
 
 def search_aoss(embeddings,filter_list):
@@ -152,6 +179,8 @@ def search_aoss(embeddings,filter_list):
         "fields": ["statement"]
     }    
 
+    print(query)
+    
     response = client.search(
         body = query,
         index = aoss_index_name
@@ -182,7 +211,7 @@ def strip_punctuation(sentence):
 
 
 def map_statement(statement_document,statement_metadata,statement_background,matches):
-    THRESHOLD = 0.8
+    THRESHOLD = 0.6
 
     # Build the OpenSearch client
     client = OpenSearch(
@@ -241,6 +270,10 @@ def handler(event,context):
         intent=field_values["intent"].lower()
         severity=field_values["severity"].lower()
         source=field_values["source"].lower()
+        # topic=field_values["topics"].lower()
+        # medicalconditions=field_values["medicalConditions"].lower()
+        topic = [topic.lower() for topic in field_values["topics"]]
+        medicalconditions = [condition.lower() for condition in field_values["medicalConditions"]]
         index_exists = index_check()
         print(type(index_exists))
 
@@ -254,7 +287,7 @@ def handler(event,context):
         print(backdata)
         embeddings=generate_embeddings(statement)
         # print(embeddings)
-        filter_list = create_filters(metadata)
+        filter_list = create_filters(metadata, intent, severity, source, topic, medicalconditions)
         print(filter_list)
 
         search_results = search_aoss(embeddings=embeddings,filter_list=filter_list)
