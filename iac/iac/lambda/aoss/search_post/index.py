@@ -173,7 +173,7 @@ def search_aoss(embeddings,filter_list):
         },
         "post_filter": {
             "bool": {
-                "should": filter_list
+                "must": filter_list
             }
         },
         "fields": ["statement"]
@@ -236,7 +236,7 @@ def map_statement(statement_document,statement_metadata,statement_background,mat
             doc_data=result["_source"]
             print(doc_data)
 
-            exact_json[ doc_data["statement"] ] = {"metadata":doc_data["metadata"], "background": doc_data["background"]}
+            exact_json[ doc_data["statement"] ] = {"metadata":doc_data["metadata"], "background": doc_data["background"], "score": result['_score']}
             exact_match.append(exact_json)
             
             statement_similar_json=doc_data["statement-similar"]
@@ -249,7 +249,7 @@ def map_statement(statement_document,statement_metadata,statement_background,mat
             print(doc_data)
 
             statement=statement_document["statement"]
-            statement_json[ statement ] = {"metadata":doc_data["metadata"], "background": doc_data["background"]}
+            statement_json[ statement ] = {"metadata":doc_data["metadata"], "background": doc_data["background"], "score": result['_score']}
             exact_match.append(statement_json)
 
             statement_similar_json=doc_data["statement-similar"]

@@ -138,7 +138,7 @@ class ApigStack(Stack):
             api_key_required=True
         )
 
-       #################################################################################
+        #################################################################################
         # /aoss/search_all
         #################################################################################
         
@@ -169,6 +169,37 @@ class ApigStack(Stack):
             api_key_required=True
         )
 
+
+        #################################################################################
+        # /aoss/delete_post
+        #################################################################################
+        
+        #
+        fn_aoss_delete_post = lambda_.Function(
+            self,"fn_aoss_delete_post",
+            description="aoss-delete_post", #microservice tag
+            runtime=lambda_.Runtime.PYTHON_3_10,
+            handler="index.handler",
+            role=AOSS_ROLE,
+            code=lambda_.Code.from_asset(os.path.join("iac/lambda/aoss","delete_post")),
+            environment={
+                "AOSS_ENDPOINT": AOSS_ENDPOINT.value,
+                "EMBEDDINGS_API": self.node.try_get_context('embeddings_api'),
+                "EMBEDDINGS_API_KEY": self.node.try_get_context('embeddings_api_key'),
+                "LOCALHOST_ORIGIN":LOCALHOST_ORIGIN if ALLOW_LOCALHOST_ORIGIN else ""
+            },
+            timeout=Duration.minutes(3),
+            layers=[ layer_aoss ]
+        )
+        #        
+        # ###### Route Base = /aoss
+        # pr_aoss_delete_post=pr_aoss.add_resource("delete_post")
+        # # GET /delete_post
+        # intg_delete_post=apigateway.LambdaIntegration(fn_aoss_delete_post)
+        # method_delete_post=pr_aoss_delete_post.add_method(
+        #     "GET",intg_delete_post,
+        #     api_key_required=True
+        # )
 
         #################################################################################
         # Custom lambda execution role permissions
